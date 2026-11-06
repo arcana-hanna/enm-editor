@@ -1,0 +1,12 @@
+{
+  "name": "enm-editor",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Single-file web editor for SchILD-NRW grade files (.enm) with interactive table import",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test test/unit.test.mjs",
+    "test:sample": "node test/replay.mjs \"$ENM_UNCHANGED\" \"$ENM_OFFICIAL\" && node test/import.test.mjs \"$ENM_UNCHANGED\""
+  },
+  "engines": { "node": ">=18" }
+}

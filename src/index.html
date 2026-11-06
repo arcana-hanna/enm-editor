@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>ENM-Noteneditor</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --surface: #ffffff; --text: #1b1f24; --muted: #5d6673; --line: #dfe3e8;
+    --accent: #1f5fbf; --accent-text: #ffffff; --edited: #fff6d6; --edited-line: #d9a400;
+    --ok: #1d7a46; --err: #b3261e; --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171b; --surface: #1d2127; --text: #e8ebef; --muted: #9aa4b1; --line: #2e343c;
+      --accent: #6ea2f2; --accent-text: #0b1220; --edited: #3a3317; --edited-line: #e0b323;
+      --ok: #5fcf8f; --err: #ff8f87;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+  header.top { background: var(--surface); border-bottom: 1px solid var(--line); }
+  header.top .wrap { display: flex; align-items: center; gap: 12px; padding-top: 12px; padding-bottom: 12px; flex-wrap: wrap; }
+  h1 { font-size: 1.1rem; margin: 0; flex: 1 1 auto; }
+  button, select, input[type=search] { font: inherit; color: inherit; }
+  button { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 8px 14px; cursor: pointer; min-height: 40px; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .45; cursor: default; }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .lang { padding: 6px 10px; min-height: 34px; font-size: .85rem; }
+
+  #drop { margin: 32px 0; border: 2px dashed var(--line); border-radius: var(--radius); background: var(--surface); padding: 40px 20px; text-align: center; }
+  #drop.over { border-color: var(--accent); }
+  #drop p { margin: .4em 0; color: var(--muted); }
+  #drop .big { font-size: 1.1rem; color: var(--text); }
+  .privacy { font-size: .9rem; }
+
+  #msg { margin: 12px 0 0; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
+  #msg.ok { border-color: var(--ok); } #msg.err { border-color: var(--err); }
+  #msg[hidden] { display: none; }
+
+  .filters { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; margin: 16px 0 10px; }
+  .filters select, .filters input[type=search] { min-height: 40px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  .filters input[type=search] { flex: 1 1 180px; min-width: 0; }
+  .filters label.chk { display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+  .meta { color: var(--muted); font-size: .9rem; margin: 4px 0 10px; }
+
+  table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); background: var(--bg); }
+  tr:last-child td { border-bottom: 0; }
+  td.name .sub { display: block; color: var(--muted); font-size: .85rem; }
+  td.pts { width: 5.5em; font-variant-numeric: tabular-nums; color: var(--muted); }
+  td.grade { width: 21em; }
+  td.grade select { width: 100%; min-height: 40px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  tr.edited td { background: var(--edited); }
+  tr.edited td:first-child { box-shadow: inset 4px 0 0 var(--edited-line); }
+  .empty { padding: 28px; text-align: center; color: var(--muted); }
+
+  .bar { position: sticky; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); margin-top: 18px; }
+  .bar .wrap { display: flex; gap: 10px; align-items: center; padding-top: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); flex-wrap: wrap; }
+  .bar .count { flex: 1 1 auto; font-weight: 600; }
+  footer.note { color: var(--muted); font-size: .85rem; padding: 18px 0 28px; }
+
+  @media (max-width: 640px) {
+    td.pts, th.pts { display: none; }
+    td.grade { width: 11em; }
+    th, td { padding: 8px; }
+  }
+
+  /* import view */
+  #imp h2 { font-size: 1.2rem; margin: 20px 0 4px; }
+  .imp-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .imp-head h2 { flex: 1 1 auto; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin: 14px 0; }
+  .card h3 { margin: 0 0 6px; font-size: 1rem; }
+  .hint { color: var(--muted); font-size: .9rem; margin: 2px 0 10px; }
+  textarea#impText { width: 100%; font: .95rem/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); resize: vertical; }
+  .row-inline { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin: 8px 0; }
+  .row-inline label { display: flex; gap: 6px; align-items: center; }
+  .row-inline select { min-height: 40px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  .target-warn { color: var(--err); font-size: .9rem; }
+  .pv { overflow-x: auto; }
+  .pv table { font-size: .9rem; }
+  .pv th select { width: 100%; min-width: 8em; min-height: 36px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+  .pv tr.hdr td { color: var(--muted); font-style: italic; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
+  .chip { border: 1px solid var(--line); border-radius: 999px; padding: 2px 12px; font-size: .9rem; background: var(--bg); }
+  .chip.ok { border-color: var(--ok); } .chip.warn { border-color: var(--edited-line); } .chip.bad { border-color: var(--err); }
+  table.rev td { vertical-align: top; }
+  table.rev td.in .tok { display: block; color: var(--muted); font-size: .85rem; }
+  table.rev select { width: 100%; min-height: 38px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  table.rev td.st { font-size: .88rem; min-width: 11em; }
+  table.rev td:nth-child(2) { min-width: 15em; }
+  table.rev td.st .note { display: block; color: var(--muted); }
+  table.rev td.st button { margin-top: 4px; min-height: 32px; padding: 3px 10px; }
+  table.rev tr.s-ok td:first-child { box-shadow: inset 4px 0 0 var(--ok); }
+  table.rev tr.s-proposed td:first-child { box-shadow: inset 4px 0 0 var(--edited-line); }
+  table.rev tr.s-decide td:first-child, table.rev tr.s-badgrade td:first-child, table.rev tr.s-duplicate td:first-child { box-shadow: inset 4px 0 0 var(--err); }
+  table.rev tr.s-skipped td { opacity: .6; }
+  details.missing { margin-top: 12px; } details.missing summary { cursor: pointer; }
+  @media (max-width: 640px) { table.rev td.cur, table.rev th.cur { display: none; } }
+  .ver-line { color: var(--muted); font-size: .8rem; margin: -14px 0 24px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <h1 data-i="title">ENM-Noteneditor</h1>
+    <button id="open" data-i="open">Datei öffnen…</button>
+    <button id="impOpen" data-i="impBtn" hidden>Tabelle importieren…</button>
+    <button class="lang" id="lang" title="Language / Sprache">EN</button>
+    <input id="file" type="file" hidden>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="msg" role="status" aria-live="polite" hidden></div>
+
+  <section id="drop">
+    <p class="big" data-i="dropTitle">.enm-Datei hierher ziehen oder öffnen</p>
+    <p><button class="primary" id="open2" data-i="open">Datei öffnen…</button></p>
+    <p class="privacy" data-i="privacy">Die Datei wird nur in diesem Browser verarbeitet und nirgendwohin hochgeladen.</p>
+  </section>
+
+  <section id="app" hidden>
+    <div class="filters">
+      <select id="fClass" aria-label="Klasse"></select>
+      <select id="fSubject" aria-label="Fach"></select>
+      <input id="fSearch" type="search" data-i-ph="search" placeholder="Name suchen">
+      <label class="chk"><input id="fEmpty" type="checkbox"> <span data-i="onlyEmpty">ohne Note</span></label>
+      <label class="chk"><input id="fEdited" type="checkbox"> <span data-i="onlyEdited">geändert</span></label>
+    </div>
+    <div class="meta" id="meta"></div>
+    <table>
+      <thead><tr><th data-i="colName">Name</th><th data-i="colGrade">Note</th><th class="pts" data-i="colPoints">Punkte</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="none" hidden data-i="none">Keine passenden Zeilen.</div>
+  </section>
+
+  <section id="imp" hidden>
+    <div class="imp-head"><h2 data-i="impTitle">Noten importieren</h2><button id="impClose" data-i="impBack">Zurück zur Liste</button></div>
+    <div class="card">
+      <h3 data-i="impStep1">1. Tabelle einfügen</h3>
+      <p class="hint" data-i="impHint"></p>
+      <textarea id="impText" rows="7" spellcheck="false" data-i-ph="impPh"></textarea>
+      <div class="row-inline"><button id="impFileBtn" data-i="impFile">Datei laden…</button><input id="impFile" type="file" hidden></div>
+    </div>
+    <div class="card" id="impMap" hidden>
+      <h3 data-i="impStep2">2. Ziel und Spalten</h3>
+      <div class="row-inline">
+        <label><span data-i="impClass">Klasse</span> <select id="impClassSel"></select></label>
+        <label><span data-i="impSubject">Fach</span> <select id="impSubjSel"></select></label>
+        <span class="target-warn" id="impTargetWarn"></span>
+      </div>
+      <div class="row-inline">
+        <label><input type="checkbox" id="impHeader"> <span data-i="impHeaderChk">Erste Zeile ist Überschrift</span></label>
+        <label><input type="checkbox" id="impOver"> <span data-i="impOverChk">Vorhandene Noten überschreiben</span></label>
+      </div>
+      <div class="pv" id="impPreview"></div>
+    </div>
+    <div class="card" id="impReview" hidden>
+      <h3 data-i="impStep3">3. Prüfen</h3>
+      <div class="chips" id="impChips"></div>
+      <div class="row-inline">
+        <button id="impConfirmAll" data-i="impConfirmAll">Alle Vorschläge bestätigen</button>
+        <label><input type="checkbox" id="impOnlyOpen"> <span data-i="impOnlyOpen">nur offene Zeilen</span></label>
+      </div>
+      <table class="rev"><thead><tr><th data-i="impColIn">Eingabe</th><th data-i="impColStud">Schüler:in</th><th data-i="colGrade">Note</th><th class="cur" data-i="impColCur">bisher</th><th data-i="impColStatus">Status</th></tr></thead><tbody id="impRows"></tbody></table>
+      <details class="missing" id="impMissing" hidden><summary id="impMissingSum"></summary><ul id="impMissingList"></ul></details>
+    </div>
+  </section>
+
+  <footer class="note" data-i="footer">Inoffizielles Werkzeug, nicht vom Hersteller der Schulverwaltungssoftware. Das Original immer aufbewahren und die bearbeitete Datei vor dem Einsatz einmal testweise importieren.</footer>
+  <p class="note ver-line"><span class="ver">dev</span></p>
+</main>
+
+<div class="bar" id="bar" hidden>
+  <div class="wrap">
+    <span class="count" id="count"></span>
+    <button id="discard" data-i="discard">Alle verwerfen</button>
+    <button class="primary" id="save" data-i="save">Speichern (.enm)</button>
+  </div>
+</div>
+
+<div class="bar" id="impBar" hidden>
+  <div class="wrap">
+    <span class="count" id="impCount"></span>
+    <button id="impCancel" data-i="cancel">Abbrechen</button>
+    <button class="primary" id="impApply" data-i="impApply">Übernehmen</button>
+  </div>
+</div>
+
+<script src="enm.js"></script>
+<script src="import.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = (s) => document.querySelector(s);
+  const I18N = {
+    de: {
+      title: 'ENM-Noteneditor', open: 'Datei öffnen…', dropTitle: '.enm-Datei hierher ziehen oder öffnen',
+      privacy: 'Die Datei wird nur in diesem Browser verarbeitet und nirgendwohin hochgeladen.',
+      search: 'Name suchen', onlyEmpty: 'ohne Note', onlyEdited: 'geändert', colName: 'Name', colGrade: 'Note', colPoints: 'Punkte',
+      none: 'Keine passenden Zeilen.', discard: 'Alle verwerfen', save: 'Speichern (.enm)',
+      footer: 'Inoffizielles Werkzeug, nicht vom Hersteller der Schulverwaltungssoftware. Das Original immer aufbewahren und die bearbeitete Datei vor dem Einsatz einmal testweise importieren.',
+      allClasses: 'Alle Klassen', allSubjects: 'Alle Fächer', noGrade: '– keine Note –',
+      shown: (a, b) => `${a} von ${b} Zeilen`, file: (n) => `Datei: ${n}`,
+      changes: (n) => n === 0 ? 'Keine Änderungen' : n === 1 ? '1 Änderung' : `${n} Änderungen`,
+      saved: (n) => `Gespeichert: ${n === 1 ? '1 Änderung' : n + ' Änderungen'}. Die Datei wurde geprüft und liegt in den Downloads. Wie gewohnt in SchILD importieren.`,
+      discarded: 'Alle Änderungen verworfen.',
+      locked: 'Diese Zeile liegt in einer Form vor, die noch nicht bearbeitet werden kann.',
+      full: (need, free) => `Diese Änderung passt nicht mehr in die Datei (${need} Byte nötig, ${free} frei auf diesem Datenblock). Sie wurde nicht übernommen. Bitte speichere zuerst und melde den Fall.`,
+      readOnly: 'Die Datei wird nur angezeigt: Ihr Aufbau ist unbekannt, Bearbeiten wäre riskant.',
+      badFile: (m) => `Diese Datei kann nicht geöffnet werden: ${m}`, saveFail: (m) => `Speichern abgebrochen. ${m}`,
+      leave: 'Es gibt nicht gespeicherte Änderungen.', needGrade: 'Unbekannte Note.',
+      impBtn: 'Tabelle importieren…', impTitle: 'Noten importieren', impBack: 'Zurück zur Liste', cancel: 'Abbrechen',
+      impStep1: '1. Tabelle einfügen', impHint: 'Aus Excel, Word, Markdown oder CSV kopieren und hier einfügen, oder eine Datei laden. Eine Spalte „Mara F 2+“ (Vorname, Initiale bei gleichen Vornamen, Note) geht auch.',
+      impPh: 'Mara F\t2+\nOle\t3\n…', impFile: 'Datei laden…',
+      impStep2: '2. Ziel und Spalten', impClass: 'Klasse', impSubject: 'Fach', allClassesShort: 'alle Klassen', pickSubject: '– bitte Fach wählen –',
+      impTargetNeed: 'Wähle zuerst das Fach, in das die Noten gehören.', impHeaderChk: 'Erste Zeile ist Überschrift', impOverChk: 'Vorhandene Noten überschreiben',
+      role_ignore: 'ignorieren', role_name: 'Name', role_first: 'Vorname', role_last: 'Nachname', role_grade: 'Note', role_combined: 'Name + Note', role_class: 'Klasse', role_subject: 'Fach',
+      impNoRows: 'Keine Zeilen erkannt.',
+      impStep3: '3. Prüfen', impConfirmAll: 'Alle Vorschläge bestätigen', impOnlyOpen: 'nur offene Zeilen',
+      impColIn: 'Eingabe', impColStud: 'Schüler:in', impColCur: 'bisher', impColStatus: 'Status', impGradeLabel: 'Note',
+      pick: '– bitte wählen –', suggestions: 'Vorschläge', allStudents: 'Alle in dieser Auswahl', skip: '– überspringen –', emptyName: '(leer)', noGradeOpt: '–',
+      chipMatched: (n) => `${n} eindeutig`, chipProposed: (n) => `${n} zu bestätigen`, chipDecide: (n) => `${n} zu klären`, chipSkipped: (n) => `${n} übersprungen`,
+      stMatched: 'Eindeutig (voller Name)', stConfirmed: 'Bestätigt', stChosen: 'Von dir gewählt', confirm: 'Bestätigen',
+      kind_first: 'Nur Vorname', kind_initial: 'Vorname + Anfangsbuchstabe', 'kind_other-given': 'Zweiter Vorname', kind_similar: 'Ähnlicher Name',
+      proposedNeed: (k) => `Vorschlag (${k}), bitte bestätigen`,
+      r_ambiguous: 'Mehrere mögliche Treffer', r_weak: 'Unsicherer Treffer, bitte wählen', r_none: 'Kein Treffer', r_class: 'Klasse passt nicht zur Auswahl', r_subject: 'Fach passt nicht zur Auswahl',
+      badGrade: (g) => `Ungültige Note „${g}“`, dup: 'Dieselbe Person kommt mehrfach vor', sk_user: 'Übersprungen', 'sk_no-grade': 'Keine Note in der Zeile', 'sk_no-name': 'Kein Name',
+      noteSame: 'Note schon so gespeichert', noteKeep: (c) => `Vorhandene Note ${c} bleibt`, noteOver: (c) => `Überschreibt ${c}`,
+      impApply: (n) => `${n} Noten übernehmen`, impApplyNone: 'Nichts zu übernehmen',
+      impCount: (a, b, c) => `${a} offen · ${b} zu bestätigen · ${c} werden gesetzt`,
+      missingSum: (n) => `${n} in dieser Auswahl ohne Eintrag in der Tabelle`,
+      impDone: (n, k, f) => `${n} Noten übernommen${k ? `, ${k} bestehende behalten` : ''}${f ? `, ${f} NICHT übernommen` : ''}. Prüfe die gelb markierten Zeilen, dann speichern.`,
+      impFail: (names) => `Nicht übernommen (kein Platz in der Datei oder Zeile gesperrt): ${names}.`,
+    },
+    en: {
+      title: 'ENM grade editor', open: 'Open file…', dropTitle: 'Drop an .enm file here or open it',
+      privacy: 'The file is processed in this browser only and is not uploaded anywhere.',
+      search: 'Search name', onlyEmpty: 'no grade', onlyEdited: 'changed', colName: 'Name', colGrade: 'Grade', colPoints: 'Points',
+      none: 'No matching rows.', discard: 'Discard all', save: 'Save (.enm)',
+      footer: 'Unofficial tool, not from the maker of the school administration software. Always keep the original, and test-import the edited file once before relying on it.',
+      allClasses: 'All classes', allSubjects: 'All subjects', noGrade: '– no grade –',
+      shown: (a, b) => `${a} of ${b} rows`, file: (n) => `File: ${n}`,
+      changes: (n) => n === 0 ? 'No changes' : n === 1 ? '1 change' : `${n} changes`,
+      saved: (n) => `Saved ${n === 1 ? '1 change' : n + ' changes'}. The file was verified and is in your downloads. Import it into SchILD as usual.`,
+      discarded: 'All changes discarded.',
+      locked: 'This row is stored in a form that cannot be edited yet.',
+      full: (need, free) => `This change no longer fits in the file (${need} bytes needed, ${free} free in this data block). It was not applied. Please save first and report this case.`,
+      readOnly: 'The file is shown read-only: its layout is not understood and editing would be risky.',
+      badFile: (m) => `This file cannot be opened: ${m}`, saveFail: (m) => `Save cancelled. ${m}`,
+      leave: 'There are unsaved changes.', needGrade: 'Unknown grade.',
+      impBtn: 'Import table…', impTitle: 'Import grades', impBack: 'Back to list', cancel: 'Cancel',
+      impStep1: '1. Paste a table', impHint: 'Copy from Excel, Word, Markdown or CSV and paste it here, or load a file. A single column like “Mara F 2+” (first name, initial if first names repeat, grade) works too.',
+      impPh: 'Mara F\t2+\nOle\t3\n…', impFile: 'Load file…',
+      impStep2: '2. Target and columns', impClass: 'Class', impSubject: 'Subject', allClassesShort: 'all classes', pickSubject: '– choose subject –',
+      impTargetNeed: 'First choose the subject the grades belong to.', impHeaderChk: 'First row is a header', impOverChk: 'Overwrite existing grades',
+      role_ignore: 'ignore', role_name: 'Name', role_first: 'First name', role_last: 'Last name', role_grade: 'Grade', role_combined: 'Name + grade', role_class: 'Class', role_subject: 'Subject',
+      impNoRows: 'No rows recognised.',
+      impStep3: '3. Review', impConfirmAll: 'Confirm all proposals', impOnlyOpen: 'open rows only',
+      impColIn: 'Input', impColStud: 'Student', impColCur: 'current', impColStatus: 'Status', impGradeLabel: 'Grade',
+      pick: '– choose –', suggestions: 'Suggestions', allStudents: 'Everyone in this selection', skip: '– skip –', emptyName: '(empty)', noGradeOpt: '–',
+      chipMatched: (n) => `${n} exact`, chipProposed: (n) => `${n} to confirm`, chipDecide: (n) => `${n} to resolve`, chipSkipped: (n) => `${n} skipped`,
+      stMatched: 'Exact (full name)', stConfirmed: 'Confirmed', stChosen: 'Chosen by you', confirm: 'Confirm',
+      kind_first: 'First name only', kind_initial: 'First name + initial', 'kind_other-given': 'Second given name', kind_similar: 'Similar name',
+      proposedNeed: (k) => `Proposal (${k}), please confirm`,
+      r_ambiguous: 'Several possible matches', r_weak: 'Weak match, please choose', r_none: 'No match', r_class: 'Class does not match the selection', r_subject: 'Subject does not match the selection',
+      badGrade: (g) => `Invalid grade “${g}”`, dup: 'The same person appears more than once', sk_user: 'Skipped', 'sk_no-grade': 'No grade in the line', 'sk_no-name': 'No name',
+      noteSame: 'Already stored with this grade', noteKeep: (c) => `Existing grade ${c} is kept`, noteOver: (c) => `Overwrites ${c}`,
+      impApply: (n) => `Apply ${n} grades`, impApplyNone: 'Nothing to apply',
+      impCount: (a, b, c) => `${a} open · ${b} to confirm · ${c} will be set`,
+      missingSum: (n) => `${n} in this selection without an entry in the table`,
+      impDone: (n, k, f) => `${n} grades applied${k ? `, ${k} existing kept` : ''}${f ? `, ${f} NOT applied` : ''}. Check the yellow rows, then save.`,
+      impFail: (names) => `Not applied (no room in the file or row locked): ${names}.`,
+    },
+  };
+  let lang = 'de';
+  try { lang = localStorage.getItem('enm-lang') || ''; } catch (e) { /* ignore */ }
+  if (lang !== 'de' && lang !== 'en') lang = (navigator.language || 'de').toLowerCase().startsWith('de') ? 'de' : 'en';
+  const t = () => I18N[lang];
+
+  let doc = null, fileName = 'grades.enm', view = [];
+  const filters = { klasse: '', fach: '', q: '', empty: false, edited: false };
+
+  function applyLang() {
+    document.documentElement.lang = lang;
+    document.querySelectorAll('[data-i]').forEach(el => { el.textContent = t()[el.dataset.i]; });
+    document.querySelectorAll('[data-i-ph]').forEach(el => { el.placeholder = t()[el.dataset.iPh]; });
+    $('#lang').textContent = lang === 'de' ? 'EN' : 'DE';
+    document.title = t().title;
+    if (doc) { buildFilterOptions(); render(); updateBar(); }
+  }
+
+  function say(text, kind) {
+    const m = $('#msg');
+    if (!text) { m.hidden = true; return; }
+    m.textContent = text; m.className = kind || ''; m.hidden = false;
+  }
+
+  // ---- loading -----------------------------------------------------------
+  async function loadFile(file) {
+    say('');
+    try {
+      const buf = await file.arrayBuffer();
+      doc = ENM.open(new Uint8Array(buf));
+      fileName = file.name || 'grades.enm';
+    } catch (e) {
+      doc = null; $('#app').hidden = true; $('#bar').hidden = true; $('#drop').hidden = false;
+      say(t().badFile(e.message || String(e)), 'err');
+      return;
+    }
+    $('#drop').hidden = true; $('#app').hidden = false; $('#impOpen').hidden = false; $('#imp').hidden = true; $('#impBar').hidden = true;
+    imp.target = { fach: '', klasse: '' }; imp.session = null; $('#impText').value = '';
+    filters.klasse = ''; filters.fach = ''; filters.q = ''; filters.empty = false; filters.edited = false;
+    $('#fSearch').value = ''; $('#fEmpty').checked = false; $('#fEdited').checked = false;
+    buildFilterOptions(); render(); updateBar();
+    if (doc.readOnly) say(t().readOnly, 'err');
+  }
+
+  function buildFilterOptions() {
+    const uniq = (f) => [...new Set(doc.rows.map(r => r[f]))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'de', { numeric: true }));
+    const fill = (sel, first, values, cur) => {
+      sel.textContent = '';
+      const o0 = document.createElement('option'); o0.value = ''; o0.textContent = first; sel.appendChild(o0);
+      for (const v of values) { const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o); }
+      sel.value = cur;
+    };
+    fill($('#fClass'), t().allClasses, uniq('klasse'), filters.klasse);
+    fill($('#fSubject'), t().allSubjects, uniq('fach'), filters.fach);
+  }
+
+  // ---- rendering ---------------------------------------------------------
+  function computeView() {
+    const q = filters.q.trim().toLowerCase();
+    view = doc.rows.filter(r =>
+      (!filters.klasse || r.klasse === filters.klasse) && (!filters.fach || r.fach === filters.fach) &&
+      (!q || r.name.toLowerCase().includes(q)) && (!filters.empty || r.krz === '') && (!filters.edited || doc.isEdited(r.id)));
+    view.sort((a, b) => a.klasse.localeCompare(b.klasse, 'de', { numeric: true }) || a.name.localeCompare(b.name, 'de') || a.fach.localeCompare(b.fach, 'de'));
+  }
+
+  function gradeSelect(r) {
+    const sel = document.createElement('select');
+    sel.setAttribute('aria-label', r.name);
+    const add = (v, text) => { const o = document.createElement('option'); o.value = v; o.textContent = text; sel.appendChild(o); };
+    add('', t().noGrade);
+    for (const g of doc.grades) add(g.krz, g.text ? `${g.krz} – ${g.text}` : g.krz);
+    if (r.krz !== '' && !doc.gradeInfo(r.krz)) add(r.krz, r.krz);
+    sel.value = r.krz;
+    if (r.locked || doc.readOnly) { sel.disabled = true; sel.title = r.locked ? t().locked : t().readOnly; }
+    sel.addEventListener('change', () => onGrade(r, sel));
+    return sel;
+  }
+
+  function render() {
+    computeView();
+    const body = $('#rows'); body.textContent = '';
+    const frag = document.createDocumentFragment();
+    for (const r of view) {
+      const tr = document.createElement('tr'); tr.dataset.id = r.id;
+      if (doc.isEdited(r.id)) tr.className = 'edited';
+      const n = document.createElement('td'); n.className = 'name';
+      n.appendChild(document.createTextNode(r.name));
+      const sub = document.createElement('span'); sub.className = 'sub';
+      sub.textContent = [r.klasse, r.fach, r.kursart].filter(Boolean).join(' · ');
+      n.appendChild(sub);
+      const g = document.createElement('td'); g.className = 'grade'; g.appendChild(gradeSelect(r));
+      const p = document.createElement('td'); p.className = 'pts'; p.textContent = r.punkte || '';
+      tr.append(n, g, p); frag.appendChild(tr);
+    }
+    body.appendChild(frag);
+    $('#none').hidden = view.length > 0;
+    $('#meta').textContent = t().file(fileName) + ' · ' + t().shown(view.length, doc.rows.length);
+  }
+
+  function updateBar() {
+    const n = doc ? doc.changeCount : 0;
+    $('#bar').hidden = !doc;
+    $('#count').textContent = t().changes(n);
+    $('#save').disabled = n === 0; $('#discard').disabled = n === 0;
+  }
+
+  function onGrade(r, sel) {
+    const res = doc.setGrade(r.id, sel.value);
+    const tr = sel.closest('tr');
+    if (!res.ok) {
+      sel.value = r.krz;
+      say(res.reason === 'page-full' ? t().full(res.need, res.free) : res.reason === 'locked' ? t().locked : t().needGrade, 'err');
+      return;
+    }
+    say('');
+    tr.classList.toggle('edited', doc.isEdited(r.id));
+    tr.querySelector('.pts').textContent = r.punkte || '';
+    updateBar();
+  }
+
+  // ---- saving ------------------------------------------------------------
+  function save() {
+    say('');
+    let bytes;
+    try { bytes = doc.save(); } catch (e) { say(t().saveFail(e.message || String(e)), 'err'); return; }
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+    const a = document.createElement('a'); a.href = url; a.download = fileName;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+    say(t().saved(doc.changeCount), 'ok');
+  }
+
+
+  // ---- import view -------------------------------------------------------
+  const imp = { text: '', parsed: null, header: false, roles: [], target: { fach: '', klasse: '' }, overwrite: false, session: null, onlyOpen: false };
+  let impTimer = null, lastFocus = null;
+
+  function showImport(on) {
+    $('#imp').hidden = !on; $('#impBar').hidden = !on;
+    $('#app').hidden = on || !doc; $('#bar').hidden = on || !doc;
+    if (on) { window.scrollTo(0, 0); impTargetOptions(); impReparse(); }
+  }
+  function impTargetOptions() {
+    const uniq = (f) => [...new Set(doc.rows.map(r => r[f]))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'de', { numeric: true }));
+    const classes = uniq('klasse'), subjects = uniq('fach');
+    const fill = (sel, opts, cur) => { sel.textContent = ''; for (const [v, l] of opts) { const o = document.createElement('option'); o.value = v; o.textContent = l; sel.appendChild(o); } sel.value = cur; };
+    if (!imp.target.klasse && classes.length === 1) imp.target.klasse = classes[0];
+    fill($('#impClassSel'), [['', t().allClassesShort], ...classes.map(c => [c, c])], imp.target.klasse);
+    fill($('#impSubjSel'), [['', t().pickSubject], ...subjects.map(c => [c, c])], imp.target.fach);
+  }
+  function impReparse() {
+    const text = $('#impText').value; imp.text = text;
+    imp.parsed = text.trim() ? ENMImport.parseTable(text, doc.grades) : null;
+    if (imp.parsed && imp.parsed.rows.length) { const g = ENMImport.guessMapping(imp.parsed.rows, doc.grades); imp.header = g.header; imp.roles = g.roles; }
+    $('#impHeader').checked = imp.header;
+    impRender();
+  }
+  function impRender() {
+    const has = imp.parsed && imp.parsed.rows.length > 0;
+    $('#impMap').hidden = !text().trim();
+    if (!$('#impMap').hidden) {
+      $('#impTargetWarn').textContent = imp.target.fach ? '' : t().impTargetNeed;
+      renderPreview(has);
+    }
+    buildSession();
+  }
+  const text = () => $('#impText').value;
+  function renderPreview(has) {
+    const box = $('#impPreview'); box.textContent = '';
+    if (!has) { box.textContent = t().impNoRows; return; }
+    const rows = imp.parsed.rows, tbl = document.createElement('table'), thead = document.createElement('thead'), tr = document.createElement('tr');
+    for (let c = 0; c < rows[0].length; c++) {
+      const th = document.createElement('th'), sel = document.createElement('select');
+      for (const r of ENMImport.ROLES) { const o = document.createElement('option'); o.value = r; o.textContent = t()['role_' + r]; sel.appendChild(o); }
+      sel.value = imp.roles[c] || 'ignore';
+      sel.addEventListener('change', () => { imp.roles[c] = sel.value; buildSession(); });
+      th.appendChild(sel); tr.appendChild(th);
+    }
+    thead.appendChild(tr); tbl.appendChild(thead);
+    const tb = document.createElement('tbody');
+    rows.slice(0, 6).forEach((r, i) => { const row = document.createElement('tr'); if (imp.header && i === 0) row.className = 'hdr'; for (const c of r) { const td = document.createElement('td'); td.textContent = c; row.appendChild(td); } tb.appendChild(row); });
+    tbl.appendChild(tb); box.appendChild(tbl);
+  }
+  function buildSession() {
+    imp.session = null;
+    const ok = imp.parsed && imp.parsed.rows.length && imp.target.fach && !$('#impMap').hidden;
+    $('#impReview').hidden = !ok;
+    if (!ok) { impBar(); return; }
+    const entries = ENMImport.buildEntries(imp.parsed.rows, imp.header, imp.roles, doc.grades);
+    imp.session = new ENMImport.ImportSession(doc, entries, { fach: imp.target.fach, klasse: imp.target.klasse });
+    imp.session.overwrite = imp.overwrite;
+    renderReview();
+  }
+  const studLabel = (s) => s.row.name + (imp.target.klasse ? '' : ' · ' + s.row.klasse);
+  function statusCell(st) {
+    const td = document.createElement('td'); td.className = 'st';
+    const main = document.createElement('div'), note = document.createElement('span'); note.className = 'note';
+    let cls = 's-decide', n = '';
+    const sess = imp.session;
+    switch (st.state) {
+      case 'ready':
+        cls = 's-ok'; main.textContent = '✓ ' + (st.matchKind === 'matched' ? t().stMatched : st.matchKind === 'chosen' ? t().stChosen : t().stConfirmed);
+        if (st.current === st.grade) n = t().noteSame; else if (st.current) n = sess.overwrite ? t().noteOver(st.current) : t().noteKeep(st.current);
+        break;
+      case 'proposed': cls = 's-proposed'; { const k = (st.base.cands.find(c => c.id === st.id) || {}).kind; main.textContent = t().proposedNeed(t()['kind_' + k] || k || ''); } break;
+      case 'decide': main.textContent = t()['r_' + st.reason] || st.reason; break;
+      case 'badgrade': cls = 's-badgrade'; main.textContent = t().badGrade(sess.entries[st.i].tok); break;
+      case 'duplicate': cls = 's-duplicate'; main.textContent = t().dup; n = '→ ' + st.duplicateWith.map(i => '#' + sess.entries[i].line).join(', '); break;
+      case 'skipped': cls = 's-skipped'; main.textContent = t()['sk_' + st.reason]; break;
+    }
+    td.appendChild(main); if (n) { note.textContent = n; td.appendChild(note); }
+    if (st.state === 'proposed') {
+      const b = document.createElement('button'); b.textContent = t().confirm; b.dataset.confirm = st.i;
+      b.addEventListener('click', () => { lastFocus = { i: st.i, k: 'confirm' }; sess.confirm(st.i); renderReview(); });
+      td.appendChild(b);
+    }
+    td.dataset.cls = cls;
+    return td;
+  }
+  function renderReview() {
+    const sess = imp.session; if (!sess) return;
+    const list = sess.all(), m = sess.summary();
+    const chips = $('#impChips'); chips.textContent = '';
+    const chip = (txt, k) => { const c = document.createElement('span'); c.className = 'chip ' + k; c.textContent = txt; chips.appendChild(c); };
+    chip(t().chipMatched(m.matched), 'ok'); if (m.proposed) chip(t().chipProposed(m.proposed), 'warn');
+    if (m.blocking) chip(t().chipDecide(m.blocking), 'bad'); if (m.skipped) chip(t().chipSkipped(m.skipped), '');
+    const body = $('#impRows'); body.textContent = '';
+    const frag = document.createDocumentFragment();
+    for (const st of list) {
+      const open = st.state === 'proposed' || st.state === 'decide' || st.state === 'badgrade' || st.state === 'duplicate';
+      if (imp.onlyOpen && !open) continue;
+      const e = sess.entries[st.i], tr = document.createElement('tr');
+      const tdIn = document.createElement('td'); tdIn.className = 'in'; tdIn.appendChild(document.createTextNode(e.name || t().emptyName));
+      const tok = document.createElement('span'); tok.className = 'tok'; tok.textContent = (t().impGradeLabel) + ': ' + (e.tok || '–') + ' · #' + e.line; tdIn.appendChild(tok);
+      const tdS = document.createElement('td'); tdS.appendChild(studentSelect(st));
+      const tdG = document.createElement('td'); tdG.appendChild(gradeSel(st));
+      const tdC = document.createElement('td'); tdC.className = 'cur'; tdC.textContent = st.current || '';
+      const tdT = statusCell(st); tr.className = tdT.dataset.cls;
+      tr.append(tdIn, tdS, tdG, tdC, tdT); frag.appendChild(tr);
+    }
+    body.appendChild(frag);
+    const miss = $('#impMissing'); miss.hidden = m.missing.length === 0;
+    $('#impMissingSum').textContent = t().missingSum(m.missing.length);
+    const ul = $('#impMissingList'); ul.textContent = '';
+    for (const s of m.missing) { const li = document.createElement('li'); li.textContent = s.row.name + (s.row.krz ? ' (' + s.row.krz + ')' : ''); ul.appendChild(li); }
+    impBar();
+    if (lastFocus) { const q = lastFocus.k === 'confirm' ? `[data-confirm="${lastFocus.i}"]` : `[data-i="${lastFocus.i}"][data-k="${lastFocus.k}"]`; const el = document.querySelector('#impRows ' + q); if (el) el.focus(); lastFocus = null; }
+  }
+  function studentSelect(st) {
+    const sess = imp.session, sel = document.createElement('select');
+    sel.dataset.i = st.i; sel.dataset.k = 'stud';
+    const add = (parent, v, label) => { const o = document.createElement('option'); o.value = v; o.textContent = label; parent.appendChild(o); };
+    if (!st.id && st.state !== 'skipped') add(sel, '', t().pick);
+    const candIds = new Set(st.candidates.map(c => c.id));
+    if (st.candidates.length) { const og = document.createElement('optgroup'); og.label = t().suggestions; for (const c of st.candidates) add(og, c.id, studLabel(sess.byId.get(c.id))); sel.appendChild(og); }
+    const og2 = document.createElement('optgroup'); og2.label = t().allStudents;
+    for (const s of sess.students.filter(s => !candIds.has(s.id)).sort((a, b) => a.row.name.localeCompare(b.row.name, 'de'))) add(og2, s.id, studLabel(s));
+    sel.appendChild(og2); add(sel, '__skip', t().skip);
+    sel.value = st.state === 'skipped' && st.reason === 'user' ? '__skip' : (st.id || '');
+    sel.addEventListener('change', () => {
+      lastFocus = { i: st.i, k: 'stud' };
+      if (sel.value === '__skip') sess.choose(st.i, null); else if (sel.value === '') sess.unchoose(st.i); else sess.choose(st.i, sel.value);
+      renderReview();
+    });
+    return sel;
+  }
+  function gradeSel(st) {
+    const sess = imp.session, sel = document.createElement('select');
+    sel.dataset.i = st.i; sel.dataset.k = 'grade';
+    const add = (v, label) => { const o = document.createElement('option'); o.value = v; o.textContent = label; sel.appendChild(o); };
+    if (st.grade === null) add('__bad', t().pick);
+    add('', t().noGradeOpt);
+    for (const g of doc.grades) add(g.krz, g.krz);
+    sel.value = st.grade === null ? '__bad' : st.grade;
+    sel.addEventListener('change', () => { if (sel.value === '__bad') return; lastFocus = { i: st.i, k: 'grade' }; sess.setGrade(st.i, sel.value); renderReview(); });
+    return sel;
+  }
+  function impBar() {
+    const sess = imp.session, apply = $('#impApply');
+    if (!sess) { $('#impCount').textContent = ''; apply.textContent = t().impApplyNone; apply.disabled = true; return; }
+    const m = sess.summary();
+    $('#impCount').textContent = t().impCount(m.blocking, m.unconfirmed, m.willSet);
+    apply.textContent = m.willSet ? t().impApply(m.willSet) : t().impApplyNone;
+    apply.disabled = !sess.canApply();
+  }
+  function impApplyNow() {
+    const sess = imp.session; if (!sess || !sess.canApply()) return;
+    const res = sess.apply();
+    showImport(false); render(); updateBar();
+    const failed = res.failed.map(s => sess.entries[s.i].name).slice(0, 6).join(', ');
+    say(t().impDone(res.applied.length, res.kept.length, res.failed.length) + (res.failed.length ? ' ' + t().impFail(failed) : ''), res.failed.length ? 'err' : 'ok');
+    $('#impText').value = ''; imp.session = null;
+  }
+  async function impLoadFile(file) {
+    const buf = await file.arrayBuffer();
+    let txt = new TextDecoder('utf-8').decode(buf);
+    if (txt.includes('�')) txt = new TextDecoder('windows-1252').decode(buf);
+    $('#impText').value = txt.replace(/^﻿/, ''); impReparse();
+  }
+
+  // ---- wiring ------------------------------------------------------------
+  const fileInput = $('#file');
+  $('#open').addEventListener('click', () => fileInput.click());
+  $('#open2').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); fileInput.value = ''; });
+  const drop = $('#drop');
+  ['dragenter', 'dragover'].forEach(ev => window.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => window.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+  window.addEventListener('drop', (e) => { const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) loadFile(f); });
+
+  $('#fClass').addEventListener('change', (e) => { filters.klasse = e.target.value; render(); });
+  $('#fSubject').addEventListener('change', (e) => { filters.fach = e.target.value; render(); });
+  $('#fSearch').addEventListener('input', (e) => { filters.q = e.target.value; render(); });
+  $('#fEmpty').addEventListener('change', (e) => { filters.empty = e.target.checked; render(); });
+  $('#fEdited').addEventListener('change', (e) => { filters.edited = e.target.checked; render(); });
+
+  $('#impOpen').addEventListener('click', () => showImport(true));
+  $('#impClose').addEventListener('click', () => showImport(false));
+  $('#impCancel').addEventListener('click', () => showImport(false));
+  $('#impText').addEventListener('input', () => { clearTimeout(impTimer); impTimer = setTimeout(impReparse, 200); });
+  $('#impFileBtn').addEventListener('click', () => $('#impFile').click());
+  $('#impFile').addEventListener('change', (e) => { if (e.target.files[0]) impLoadFile(e.target.files[0]); e.target.value = ''; });
+  $('#impClassSel').addEventListener('change', (e) => { imp.target.klasse = e.target.value; impRender(); });
+  $('#impSubjSel').addEventListener('change', (e) => { imp.target.fach = e.target.value; impRender(); });
+  $('#impHeader').addEventListener('change', (e) => { imp.header = e.target.checked; impRender(); });
+  $('#impOver').addEventListener('change', (e) => { imp.overwrite = e.target.checked; if (imp.session) { imp.session.overwrite = imp.overwrite; renderReview(); } });
+  $('#impOnlyOpen').addEventListener('change', (e) => { imp.onlyOpen = e.target.checked; renderReview(); });
+  $('#impConfirmAll').addEventListener('click', () => { if (imp.session) { imp.session.confirmAllProposed(); renderReview(); } });
+  $('#impApply').addEventListener('click', impApplyNow);
+  $('#save').addEventListener('click', save);
+  $('#discard').addEventListener('click', () => { doc.discardAll(); render(); updateBar(); say(t().discarded); });
+  $('#lang').addEventListener('click', () => { lang = lang === 'de' ? 'en' : 'de'; try { localStorage.setItem('enm-lang', lang); } catch (e) { /* ignore */ } applyLang(); });
+  window.addEventListener('beforeunload', (e) => { if (doc && doc.changeCount > 0) { e.preventDefault(); e.returnValue = t().leave; } });
+
+  applyLang();
+  window.__enm = { get doc() { return doc; } }; // handy for debugging in the console
+})();
+</script>
+</body>
+</html>
